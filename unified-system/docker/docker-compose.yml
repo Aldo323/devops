@@ -1,0 +1,126 @@
+# Docker Compose Unificado - Sistema Completo
+# Ubicación: /root/unified-apps/docker-compose.yml
+
+services:
+  # Base de Datos SQL Server
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver_main
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Ant_2019.
+      - MSSQL_PID=developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+      - /root/backups:/backups
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Ant_2019. -Q 'SELECT 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Aplicación POSApp
+  posapp:
+    image: aldomoreno/posapp:latest
+    container_name: posapp_main
+    ports:
+      - "8081:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=POSDB;User Id=sa;Password=Ant_2019.;TrustServerCertificate=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Aplicación BuildTool
+  buildtool:
+    image: aldomoreno/buildtool:latest
+    container_name: buildtool_main
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=POSDB;User Id=sa;Password=Ant_2019.;TrustServerCertificate=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Aplicación EcommerceApp (Nueva)
+  ecommerceapp:
+    image: aldomoreno/ecommerceapp:latest
+    container_name: ecommerce_main
+    ports:
+      - "8082:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=POSDB;User Id=sa;Password=Ant_2019.;TrustServerCertificate=True;
+      - BaseUrl=https://lizzaaccesorios.com.mx
+      # Variables de MercadoPago (configurar después)
+      - MercadoPago__PublicKey=${MERCADOPAGO_PUBLIC_KEY:-}
+      - MercadoPago__AccessToken=${MERCADOPAGO_ACCESS_TOKEN:-}
+      # Variables OAuth (configurar después)
+      - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID:-}
+      - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - Authentication__Facebook__AppId=${FACEBOOK_APP_ID:-}
+      - Authentication__Facebook__AppSecret=${FACEBOOK_APP_SECRET:-}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Aplicación RepartidorApp (Futura)
+  # repartidorapp:
+  #   image: aldomoreno/repartidorapp:latest
+  #   container_name: repartidor_main
+  #   ports:
+  #     - "8083:8080"
+  #   environment:
+  #     - ASPNETCORE_ENVIRONMENT=Production
+  #     - ASPNETCORE_URLS=http://+:8080
+  #     - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=POSDB;User Id=sa;Password=Ant_2019.;TrustServerCertificate=True;
+  #   depends_on:
+  #     sqlserver:
+  #       condition: service_healthy
+  #   networks:
+  #     - app-network
+  #   restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+    name: unified_network
+
+volumes:
+  sqldata:
+    name: unified_sqldata
